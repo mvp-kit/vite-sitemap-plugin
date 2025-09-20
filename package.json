@@ -1,6 +1,6 @@
 {
   "name": "@mvp-kit/vite-sitemap-plugin",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Vite plugin for automatic sitemap generation from TanStack Router route tree",
   "type": "module",
   "main": "dist/index.js",
