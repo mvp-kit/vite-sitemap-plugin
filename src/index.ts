@@ -40,20 +40,20 @@ function extractRoutesFromRouteTree(routeTreePath: string): string[] {
 
     const content = fs.readFileSync(routeTreePath, 'utf-8')
 
-    // Extract fullPaths type definition - handles single route
-    const singlePathMatch = content.match(/fullPaths:\s*'([^']+)'/)
-    if (singlePathMatch) {
-      return [singlePathMatch[1]]
-    }
-
     // Extract multiple paths from union type like '/' | '/about' | '/contact'
-    const unionMatch = content.match(/fullPaths:\s*([^,\n]+)/)
+    const unionMatch = content.match(/fullPaths:\s*([^\n]+)/)
     if (unionMatch) {
       const unionType = unionMatch[1]
       const pathMatches = unionType.match(/'([^']+)'/g)
       if (pathMatches) {
         return pathMatches.map(match => match.slice(1, -1)) // Remove quotes
       }
+    }
+
+    // Extract fullPaths type definition - handles single route (fallback)
+    const singlePathMatch = content.match(/fullPaths:\s*'([^']+)'$/)
+    if (singlePathMatch) {
+      return [singlePathMatch[1]]
     }
 
     // Fallback: extract from FileRoutesByFullPath interface

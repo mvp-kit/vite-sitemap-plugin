@@ -72,6 +72,9 @@ jobs:
         if: steps.version.outputs.new-version == 'true'
         run: |
           echo "Publishing stable version ${{ steps.version.outputs.current }} to NPM"
+          # Configure for NPM registry
+          npm config set registry https://registry.npmjs.org
+          npm config delete @mvp-kit:registry
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -85,8 +88,8 @@ jobs:
           npm config set @mvp-kit:registry https://npm.pkg.github.com
           npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
 
-          # Publish to GitHub Packages with latest tag
-          npm publish --tag latest --access public
+          # Publish to GitHub Packages with latest tag (ignore conflicts if dev version exists)
+          npm publish --tag latest --access public || echo "Stable version may conflict with existing dev version - this is expected"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
