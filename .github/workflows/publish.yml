@@ -1,0 +1,107 @@
+name: Publish Package
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Check for version changes
+        id: version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+
+          # Check if this version has been published by looking for git tag
+          PUBLISHED=$(git tag -l "v$CURRENT" | head -1)
+          if [ -z "$PUBLISHED" ]; then
+            echo "new-version=true" >> $GITHUB_OUTPUT
+            echo "Version $CURRENT is new, will publish"
+          else
+            echo "new-version=false" >> $GITHUB_OUTPUT
+            echo "Version $CURRENT already exists, skipping stable release"
+          fi
+
+      # Always publish dev version to GitHub Packages
+      - name: Publish dev version to GitHub Packages
+        run: |
+          DEV_VERSION="${{ steps.version.outputs.current }}-dev.$(git rev-parse --short HEAD)"
+          echo "Publishing dev version: $DEV_VERSION"
+
+          # Update version temporarily
+          npm version $DEV_VERSION --no-git-tag-version
+
+          # Configure for GitHub Packages
+          npm config set @mvp-kit:registry https://npm.pkg.github.com
+          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
+
+          # Publish to GitHub Packages with dev tag
+          npm publish --tag latest-dev --access public
+
+          # Reset version
+          git checkout package.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publish stable version to both registries if version is new
+      - name: Publish stable version to NPM
+        if: steps.version.outputs.new-version == 'true'
+        run: |
+          echo "Publishing stable version ${{ steps.version.outputs.current }} to NPM"
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish stable version to GitHub Packages
+        if: steps.version.outputs.new-version == 'true'
+        run: |
+          echo "Publishing stable version ${{ steps.version.outputs.current }} to GitHub Packages"
+
+          # Configure for GitHub Packages
+          npm config set @mvp-kit:registry https://npm.pkg.github.com
+          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
+
+          # Publish to GitHub Packages with latest tag
+          npm publish --tag latest --access public
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Git tag
+        if: steps.version.outputs.new-version == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Delete tag if it exists
+          git tag -d "v${{ steps.version.outputs.current }}" 2>/dev/null || true
+          git push origin --delete "v${{ steps.version.outputs.current }}" 2>/dev/null || true
+
+          # Create new tag
+          git tag "v${{ steps.version.outputs.current }}"
+          git push origin "v${{ steps.version.outputs.current }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
