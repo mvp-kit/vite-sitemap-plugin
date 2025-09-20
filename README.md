@@ -1,4 +1,4 @@
-# @mvp-kit/sitemap-generator
+# @mvp-kit/vite-sitemap-plugin
 
 A Vite plugin for automatic sitemap generation from TanStack Router route tree.
 
@@ -14,11 +14,11 @@ A Vite plugin for automatic sitemap generation from TanStack Router route tree.
 ## Installation
 
 ```bash
-npm install @mvp-kit/sitemap-generator
+npm install @mvp-kit/vite-sitemap-plugin
 # or
-pnpm add @mvp-kit/sitemap-generator
+pnpm add @mvp-kit/vite-sitemap-plugin
 # or
-yarn add @mvp-kit/sitemap-generator
+yarn add @mvp-kit/vite-sitemap-plugin
 ```
 
 ## Usage
@@ -28,7 +28,7 @@ yarn add @mvp-kit/sitemap-generator
 ```typescript
 // vite.config.ts
 import { defineConfig } from 'vite'
-import { sitemapPlugin } from '@mvp-kit/sitemap-generator'
+import { sitemapPlugin } from '@mvp-kit/vite-sitemap-plugin'
 
 export default defineConfig({
   plugins: [
@@ -95,7 +95,7 @@ The plugin generates two files in your build output:
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://your-domain.com/</loc>
-    <lastmod>2024-01-19</lastmod>
+    <lastmod>2025-09-19</lastmod>
     <changefreq>daily</changefreq>
     <priority>1</priority>
   </url>
@@ -123,7 +123,7 @@ Sitemap: https://your-domain.com/sitemap.xml
 The plugin is written in TypeScript and includes full type definitions.
 
 ```typescript
-import type { SitemapPluginOptions, RouteInfo } from '@mvp-kit/sitemap-generator'
+import type { SitemapPluginOptions, RouteInfo } from '@mvp-kit/vite-sitemap-plugin'
 ```
 
 ## License
