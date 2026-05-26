@@ -14,15 +14,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
       - name: Install dependencies
         run: npm ci
@@ -49,7 +50,7 @@ jobs:
       # Always publish dev version to GitHub Packages
       - name: Publish dev version to GitHub Packages
         run: |
-          DEV_VERSION="${{ steps.version.outputs.current }}-dev.$(git rev-parse --short HEAD)"
+          DEV_VERSION="${{ steps.version.outputs.current }}-dev.$(git rev-parse --short HEAD).${{ github.run_attempt }}"
           echo "Publishing dev version: $DEV_VERSION"
 
           # Update version temporarily
@@ -60,7 +61,7 @@ jobs:
           npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
 
           # Publish to GitHub Packages with dev tag
-          npm publish --tag latest-dev --access public
+          npm publish --tag latest-dev --access public || echo "Dev version already exists, continuing"
 
           # Reset version
           git checkout package.json
@@ -72,12 +73,9 @@ jobs:
         if: steps.version.outputs.new-version == 'true'
         run: |
           echo "Publishing stable version ${{ steps.version.outputs.current }} to NPM"
-          # Configure for NPM registry
           npm config set registry https://registry.npmjs.org
           npm config delete @mvp-kit:registry
           npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish stable version to GitHub Packages
         if: steps.version.outputs.new-version == 'true'

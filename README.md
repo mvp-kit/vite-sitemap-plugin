@@ -1,138 +1,182 @@
 # @mvp-kit/vite-sitemap-plugin
 
-A Vite plugin for automatic sitemap generation from TanStack Router route tree.
+[![npm version](https://img.shields.io/npm/v/@mvp-kit/vite-sitemap-plugin.svg)](https://www.npmjs.com/package/@mvp-kit/vite-sitemap-plugin)
+[![license](https://img.shields.io/npm/l/@mvp-kit/vite-sitemap-plugin.svg)](LICENSE)
 
-> Part of the [MVPKit](https://mvpkit.dev) ecosystem - The fastest way to build production-ready web applications.
+Keep your sitemap current with each Vite build.
+
+`@mvp-kit/vite-sitemap-plugin` generates `sitemap.xml` from TanStack Router's `routeTree.gen.ts`, an explicit route list, or both. It writes to Vite's actual build output directory, works in monorepos, and can update `robots.txt` with the sitemap URL.
 
 ## Features
 
-- 🗺️ Automatic sitemap.xml generation from TanStack Router routes
-- 🤖 robots.txt generation with sitemap reference
-- ⚡ Build-time generation (zero runtime overhead)
-- 🎯 SEO-optimized with customizable priorities and changefreq
-- 🔧 Highly configurable with custom route handling
-- 📦 TypeScript support
+- Read TanStack Router routes from `routeTree.gen.ts`
+- Add explicit routes or load them asynchronously
+- Write to Vite's resolved `build.outDir`
+- Normalize and validate `baseUrl`
+- Skip unresolved dynamic routes such as `/blog/$slug`
+- Exclude routes by path, `/**` glob, regex, or predicate
+- Add `lastmod`, priority, changefreq, and image metadata per route
+- Append, overwrite, or skip `robots.txt`
+- Fail the build in strict mode
 
-## Installation
+Sitemap indexes and sitemap splitting are not included in this release.
+
+## Install
 
 ```bash
 npm install @mvp-kit/vite-sitemap-plugin
-# or
-pnpm add @mvp-kit/vite-sitemap-plugin
-# or
-yarn add @mvp-kit/vite-sitemap-plugin
 ```
 
-## Usage
+## Quick Start
 
-### Basic Setup
-
-```typescript
+```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
 import { sitemapPlugin } from '@mvp-kit/vite-sitemap-plugin'
 
 export default defineConfig({
   plugins: [
-    // ... other plugins
     sitemapPlugin({
-      baseUrl: 'https://your-domain.com'
-    })
-  ]
+      baseUrl: 'https://example.com',
+      routes: ['/', '/about', '/pricing'],
+    }),
+  ],
 })
 ```
 
-### Advanced Configuration
+Run `vite build`. The plugin writes `sitemap.xml` to Vite's resolved `build.outDir`.
 
-```typescript
+## TanStack Router
+
+```ts
 sitemapPlugin({
-  baseUrl: 'https://your-domain.com',
-  routeTreePath: 'src/routeTree.gen.ts', // TanStack Router route tree
-  enabled: process.env.NODE_ENV === 'production',
-  includeRobots: true,
-  additionalRoutes: ['/sitemap'], // Add custom routes
-  excludeRoutes: ['/admin', '/private'], // Exclude routes
-  getRoutePriority: (route) => {
-    if (route === '/') return 1.0
-    if (route.startsWith('/blog')) return 0.9
-    return 0.8
+  baseUrl: 'https://example.com',
+  routeTreePath: 'src/routeTree.gen.ts',
+  routes: ['/blog/hello-world'],
+  strict: true,
+})
+```
+
+`routeTreePath` is resolved from Vite `root`. Routes from the route tree and `routes` are normalized, merged, and deduplicated.
+
+Dynamic route patterns are skipped. Add concrete URLs through `routes`.
+
+## Explicit Routes
+
+Use `routes` when URLs come from content, CMS data, or another route source.
+
+```ts
+sitemapPlugin({
+  baseUrl: 'https://example.com',
+  routes: async () => {
+    const posts = await loadPublishedPosts()
+    return ['/', '/docs', ...posts.map(post => `/blog/${post.slug}`)]
   },
-  getRouteChangefreq: (route) => {
-    if (route === '/') return 'daily'
-    if (route.startsWith('/blog')) return 'weekly'
-    return 'monthly'
+})
+```
+
+## Cloudflare Pages
+
+```ts
+// vite.config.ts
+import { defineConfig, loadEnv } from 'vite'
+import { sitemapPlugin } from '@mvp-kit/vite-sitemap-plugin'
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    build: {
+      outDir: 'dist',
+    },
+    plugins: [
+      sitemapPlugin({
+        baseUrl: env.PUBLIC_SITE_URL,
+        routeTreePath: 'src/routeTree.gen.ts',
+        strict: mode === 'production',
+      }),
+    ],
   }
 })
 ```
+
+Set `PUBLIC_SITE_URL` to the canonical URL, for example `https://example.com`.
+
+## robots.txt
+
+By default, the plugin creates `robots.txt` when missing and appends a `Sitemap:` line when the file already exists.
+
+```ts
+sitemapPlugin({
+  baseUrl: 'https://example.com',
+  routes: ['/'],
+  robotsTxt: {
+    mode: 'overwrite',
+    rules: ['User-agent: *', 'Disallow: /private'],
+  },
+})
+```
+
+Set `robotsTxt: false` or `robotsTxt: { mode: 'skip' }` to leave the file untouched.
+
+## Route Metadata
+
+```ts
+sitemapPlugin({
+  baseUrl: 'https://example.com',
+  routes: ['/', '/docs', '/blog/hello-world'],
+  getRoutePriority: route => (route === '/' ? 1 : 0.8),
+  getRouteChangefreq: route => (route.startsWith('/blog') ? 'weekly' : 'monthly'),
+  getRouteLastmod: route => (route.startsWith('/blog') ? '2026-05-26' : undefined),
+  getRouteImages: async route => (route === '/' ? ['/images/social-card.jpg'] : []),
+})
+```
+
+`priority` must be between `0.0` and `1.0`. `changefreq` must be one of `always`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`, or `never`.
 
 ## Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `baseUrl` | `string` | **Required** | Base URL for the sitemap |
-| `routeTreePath` | `string` | `'src/routeTree.gen.ts'` | Path to TanStack Router route tree |
-| `enabled` | `boolean` | `true` | Enable/disable sitemap generation |
-| `includeRobots` | `boolean` | `true` | Generate robots.txt file |
-| `additionalRoutes` | `string[]` | `[]` | Additional routes to include |
-| `excludeRoutes` | `string[]` | `[]` | Routes to exclude from sitemap |
-| `getRoutePriority` | `(route: string) => number` | Default logic | Custom priority function |
-| `getRouteChangefreq` | `(route: string) => string` | Default logic | Custom changefreq function |
+| `baseUrl` | `string` | Required | Absolute site URL. Trailing slashes are removed. |
+| `routeTreePath` | `string` | `undefined` | TanStack Router route tree path, resolved from Vite root. |
+| `routes` | `string[] \| (() => string[] \| Promise<string[]>)` | `[]` | Explicit route list or async route loader. |
+| `enabled` | `boolean` | `true` | Enables sitemap generation. |
+| `strict` | `boolean` | `false` | Throws on URL warnings and generation errors. |
+| `robotsTxt` | `boolean \| RobotsTxtOptions` | `{ mode: 'append' }` | Controls `robots.txt` output. |
+| `excludeRoutes` | `RouteMatcher[]` | `[]` | Excludes exact routes, `/**` globs, regex matches, or predicate matches. |
+| `getRoutePriority` | `(route: string) => number` | Built-in defaults | Returns sitemap priority from `0.0` to `1.0`. |
+| `getRouteChangefreq` | `(route: string) => Changefreq` | Built-in defaults | Returns sitemap change frequency. |
+| `getRouteLastmod` | `(route: string) => string \| Date \| undefined` | Build date | Returns per-route `lastmod`. |
+| `getRouteImages` | `(route: string) => string[] \| Promise<string[]>` | `undefined` | Returns absolute or site-relative image URLs. |
+| `verbose` | `boolean` | `false` | Logs route-level details. |
 
-## Default SEO Settings
+```ts
+type RouteMatcher = string | RegExp | ((route: string) => boolean)
 
-| Route Pattern | Priority | Change Frequency |
-|---------------|----------|------------------|
-| `/` (Homepage) | 1.0 | daily |
-| `/blog/*`, `/docs/*` | 0.9 | weekly |
-| `/api/*`, `/reference/*` | 0.7 | monthly |
-| Other routes | 0.8 | weekly |
+type RobotsTxtOptions =
+  | boolean
+  | {
+      mode?: 'append' | 'overwrite' | 'skip'
+      rules?: string[]
+    }
+```
 
 ## Output
 
-The plugin generates two files in your build output:
-
-### sitemap.xml
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://your-domain.com/</loc>
-    <lastmod>2025-09-19</lastmod>
+    <loc>https://example.com/</loc>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>daily</changefreq>
     <priority>1</priority>
   </url>
-  <!-- More URLs... -->
 </urlset>
 ```
 
-### robots.txt
-```
-User-agent: *
-Allow: /
-
-Sitemap: https://your-domain.com/sitemap.xml
-```
-
-## How It Works
-
-1. **Route Detection**: Parses TanStack Router's `routeTree.gen.ts` to extract all routes
-2. **SEO Optimization**: Applies intelligent defaults or custom logic for priorities and change frequencies
-3. **Build Integration**: Runs during Vite's build process using the `closeBundle` hook
-4. **File Generation**: Creates sitemap.xml and robots.txt in the output directory
-
-## TypeScript Support
-
-The plugin is written in TypeScript and includes full type definitions.
-
-```typescript
-import type { SitemapPluginOptions, RouteInfo } from '@mvp-kit/vite-sitemap-plugin'
-```
-
-## More from MVPKit
-
-- **[MVPKit](https://mvpkit.dev)** - Complete toolkit for building production-ready web applications
-- **[Documentation](https://mvpkit.dev/docs)** - Comprehensive guides and API reference
-- **[Templates](https://mvpkit.dev/templates)** - Ready-to-use project templates
+Image metadata adds the image sitemap namespace and `image:image` entries.
 
 ## License
 
