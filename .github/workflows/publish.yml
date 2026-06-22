@@ -45,12 +45,33 @@ jobs:
           CURRENT=$(node -p "require('./package.json').version")
           echo "current=$CURRENT" >> $GITHUB_OUTPUT
 
-          if npm view "@mvp-kit/vite-sitemap-plugin@$CURRENT" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
-            echo "publish=false" >> $GITHUB_OUTPUT
-            echo "Version $CURRENT already exists on npm, skipping publish."
+          PREVIOUS=""
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            PREVIOUS=$(git show HEAD^:package.json 2>/dev/null | node -e "const fs=require('fs');const data=fs.readFileSync(0,'utf8').trim();if(data){process.stdout.write(JSON.parse(data).version||'')}" || true)
+          fi
+
+          if [ -z "$PREVIOUS" ] || [ "$CURRENT" != "$PREVIOUS" ]; then
+            VERSION_CHANGED="true"
+            echo "Version changed: '$PREVIOUS' -> '$CURRENT'"
           else
+            VERSION_CHANGED="false"
+            echo "Version unchanged: '$CURRENT'"
+          fi
+          echo "version_changed=$VERSION_CHANGED" >> $GITHUB_OUTPUT
+
+          if [ "$VERSION_CHANGED" = "true" ] && npm view "@mvp-kit/vite-sitemap-plugin@$CURRENT" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            NPM_EXISTS="true"
+          else
+            NPM_EXISTS="false"
+          fi
+          echo "npm_exists=$NPM_EXISTS" >> $GITHUB_OUTPUT
+
+          if [ "$VERSION_CHANGED" = "true" ] && [ "$NPM_EXISTS" = "false" ]; then
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "Version $CURRENT is new, publishing to npm."
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+            echo "Skipping publish."
           fi
 
       - name: Check package contents
