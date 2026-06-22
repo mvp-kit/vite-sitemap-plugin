@@ -9,7 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
       id-token: write
 
     steps:
@@ -25,84 +24,56 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bun run typecheck
+
+      - name: Run tests
+        run: bun run test -- --run
 
       - name: Build package
-        run: npm run build
+        run: bun run build
 
-      - name: Check for version changes
+      - name: Check package version
         id: version
         run: |
           CURRENT=$(node -p "require('./package.json').version")
           echo "current=$CURRENT" >> $GITHUB_OUTPUT
 
-          # Check if this version has been published by looking for git tag
-          PUBLISHED=$(git tag -l "v$CURRENT" | head -1)
-          if [ -z "$PUBLISHED" ]; then
-            echo "new-version=true" >> $GITHUB_OUTPUT
-            echo "Version $CURRENT is new, will publish"
+          if npm view "@mvp-kit/vite-sitemap-plugin@$CURRENT" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "publish=false" >> $GITHUB_OUTPUT
+            echo "Version $CURRENT already exists on npm, skipping publish."
           else
-            echo "new-version=false" >> $GITHUB_OUTPUT
-            echo "Version $CURRENT already exists, skipping stable release"
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "Version $CURRENT is new, publishing to npm."
           fi
 
-      # Always publish dev version to GitHub Packages
-      - name: Publish dev version to GitHub Packages
+      - name: Check package contents
+        if: steps.version.outputs.publish == 'true'
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        if: steps.version.outputs.publish == 'true'
         run: |
-          DEV_VERSION="${{ steps.version.outputs.current }}-dev.$(git rev-parse --short HEAD).${{ github.run_attempt }}"
-          echo "Publishing dev version: $DEV_VERSION"
-
-          # Update version temporarily
-          npm version $DEV_VERSION --no-git-tag-version
-
-          # Configure for GitHub Packages
-          npm config set @mvp-kit:registry https://npm.pkg.github.com
-          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
-
-          # Publish to GitHub Packages with dev tag
-          npm publish --tag latest-dev --access public || echo "Dev version already exists, continuing"
-
-          # Reset version
-          git checkout package.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Publish stable version to both registries if version is new
-      - name: Publish stable version to NPM
-        if: steps.version.outputs.new-version == 'true'
-        run: |
-          echo "Publishing stable version ${{ steps.version.outputs.current }} to NPM"
-          npm config set registry https://registry.npmjs.org
-          npm config delete @mvp-kit:registry
-          npm publish --access public
-
-      - name: Publish stable version to GitHub Packages
-        if: steps.version.outputs.new-version == 'true'
-        run: |
-          echo "Publishing stable version ${{ steps.version.outputs.current }} to GitHub Packages"
-
-          # Configure for GitHub Packages
-          npm config set @mvp-kit:registry https://npm.pkg.github.com
-          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
-
-          # Publish to GitHub Packages with latest tag (ignore conflicts if dev version exists)
-          npm publish --tag latest --access public || echo "Stable version may conflict with existing dev version - this is expected"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "Publishing version ${{ steps.version.outputs.current }} to npm"
+          npm publish --provenance --access public --registry=https://registry.npmjs.org
 
       - name: Create Git tag
-        if: steps.version.outputs.new-version == 'true'
+        if: steps.version.outputs.publish == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Delete tag if it exists
-          git tag -d "v${{ steps.version.outputs.current }}" 2>/dev/null || true
-          git push origin --delete "v${{ steps.version.outputs.current }}" 2>/dev/null || true
+          TAG="v${{ steps.version.outputs.current }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on origin, skipping."
+            exit 0
+          fi
 
-          # Create new tag
-          git tag "v${{ steps.version.outputs.current }}"
-          git push origin "v${{ steps.version.outputs.current }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"

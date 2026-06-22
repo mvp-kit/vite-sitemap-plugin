@@ -12,17 +12,17 @@ Thank you for your interest in contributing! We welcome all types of contributio
 
 2. **Install dependencies**
    ```bash
-   npm install
+   bun install
    ```
 
 3. **Build the plugin**
    ```bash
-   npm run build
+   bun run build
    ```
 
 4. **Run in development mode**
    ```bash
-   npm run dev
+   bun run dev
    ```
 
 ## Project Structure
@@ -38,7 +38,7 @@ LICENSE             # MIT License
 ## Development Workflow
 
 1. **Make your changes** in `src/index.ts`
-2. **Build** with `npm run build`
+2. **Build** with `bun run build`
 3. **Test** your changes in a sample project
 4. **Submit a pull request**
 
